@@ -1,4 +1,4 @@
-# ⚡ Project Veracity
+#  Project Veracity
 
 > **AI-Powered Code Risk Analysis Platform**  
 
@@ -25,19 +25,7 @@ backend-ml/
 │   ├── .env                   # Environment variables
 │   └── package.json
 │
-├── ml_service/               # Python FastAPI ML Worker
-│   ├── services/
-│   │   ├── radon_service.py   # Code metrics extraction
-│   │   ├── shap_service.py    # SHAP explainability
-│   │   └── chatbot_service.py # Mitigation advice engine
-│   ├── models/
-│   │   ├── model.pkl          # Trained XGBoost model
-│   │   ├── feature_names.json # Feature list
-│   │   └── threshold.json     # Classification threshold
-│   ├── data/                  # Training datasets (PROMISE)
-│   ├── main.py                # FastAPI entry point
-│   └── requirements.txt
-│
+
 
 ```
 
@@ -159,99 +147,6 @@ Authorization: Bearer <token>
 | `user` (pro) | ✅ | ❌ | ✅ | ❌ |
 | `project_manager` | ✅ | ✅ | ✅ | Partial |
 | `admin` | ✅ | ✅ | ✅ | ✅ |
-
----
-
-## 🤖 ML Service — Python FastAPI
-
-### Prerequisites
-
-- Python 3.9+
-- pip
-
-### Installation
-
-```bash
-cd ml_service
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# Mac/Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-### Run
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8080 --reload
-```
-
-ML Worker runs at: `http://localhost:8080`
-
----
-
-## 🔬 ML Service Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check + model status |
-| GET | `/features` | List of 26 features used |
-| POST | `/analyze` | Analyze code string |
-| POST | `/analyze-file` | Analyze uploaded `.py` file |
-| POST | `/explain` | Explain a single feature |
-| POST | `/chat/start` | Start chatbot session |
-| POST | `/chat/message` | Send chatbot message |
-| POST | `/chat/reset` | Reset chatbot session |
-| POST | `/report/json` | Generate JSON report |
-| POST | `/report/xml` | Generate XML report |
-
-### Example: Analyze a File
-
-```bash
-curl -X POST http://localhost:8000/analyze-file \
-  -F "file=@your_code.py"
-```
-
-### Example Response
-
-```json
-{
-  "filename": "your_code.py",
-  "risk_level": "Low",
-  "bug_probability": 0.053,
-  "threshold_used": 0.35,
-  "features": { "loc": 4, "v(g)": 1.0, ... },
-  "shap_explanation": {
-    "top_features": [...],
-    "base_value": 1.19
-  },
-  "mitigation_advice": { ... }
-}
-```
-
----
-
-## 🧠 ML Model Details
-
-| Property | Value |
-|----------|-------|
-| Algorithm | XGBoost Ensemble |
-| Features | 26 static code metrics |
-| Training Data | PROMISE Repository (NASA datasets) |
-| Threshold | 0.35 (optimized) |
-| Explainability | SHAP TreeExplainer |
-| Metric Extraction | Radon (Python) |
-
-### Features Used
-
-`loc`, `v(g)`, `ev(g)`, `iv(g)`, `n`, `v`, `l`, `d`, `i`, `e`, `b`, `t`,
-`locode`, `locomment`, `loblank`, `locodeandcomment`, `uniq_op`, `uniq_opnd`,
-`total_op`, `total_opnd`, `branchcount`, `cbo`, `rfc`, `v_density`,
-`cyclomatic_loc`, `halstead_difficulty`
 
 ---
 
