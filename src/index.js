@@ -18,7 +18,15 @@ require('./workers/analysisQueue');
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+app.use(cors({ 
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'https://project-veracity-backend-initial-production-be6f.up.railway.app'
+  ],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
