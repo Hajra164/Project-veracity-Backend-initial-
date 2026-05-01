@@ -215,176 +215,6 @@ router.post('/', verifyToken, upload.single('file'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// PUT /api/projects/:id
-// Update project name or description
-// user → own project only
-// admin/pm → any project
-// ─────────────────────────────────────────────
-router.put('/:id', verifyToken, async (req, res) => {
-  const userId = req.user.user_id || req.user.id;
-  const { id } = req.params;
-  const { project_name, project_description } = req.body;
-
-  if (!project_name && project_description === undefined) {
-    return res.status(400).json({ error: 'Nothing to update.' });
-  }
-
-  try {
-    let result;
-
-    if (req.user.role === 'user' || req.user.role === 'student') {
-      // Users can only update their own projects
-      result = await pool.query(
-        `UPDATE projects
-         SET    project_name        = COALESCE($1, project_name),
-                project_description = COALESCE($2, project_description),
-                updated_at          = NOW()
-         WHERE  project_id = $3 AND user_id = $4
-         RETURNING project_id, project_name, project_description, updated_at`,
-        [project_name || null, project_description || null, id, userId]
-      );
-    } else {
-      // PM and admin can update any project
-      result = await pool.query(
-        `UPDATE projects
-         SET    project_name        = COALESCE($1, project_name),
-                project_description = COALESCE($2, project_description),
-                updated_at          = NOW()
-         WHERE  project_id = $3
-         RETURNING project_id, project_name, project_description, updated_at`,
-        [project_name || null, project_description || null, id]
-      );
-    }
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Project not found.' });
-    }
-
-    return res.status(200).json({ project: result.rows[0] });
-
-  } catch (err) {
-    console.error('PUT /projects/:id error:', err.message);
-    return res.status(500).json({ error: 'Failed to update project.' });
-  }
-});
-
-// ─────────────────────────────────────────────
-// DELETE /api/projects/:id
-// Soft delete — archives the project
-// user → own project only
-// admin/pm → any project
-// ─────────────────────────────────────────────
-router.delete('/:id', verifyToken, async (req, res) => {
-  const userId = req.user.user_id || req.user.id;
-  const { id } = req.params;
-
-  try {
-    let result;
-
-    if (req.user.role === 'user' || req.user.role === 'student') {
-      // Users can only delete their own projects
-      result = await pool.query(
-        `UPDATE projects
-         SET    is_archived = true,
-                archived_at = NOW(),
-                updated_at  = NOW()
-         WHERE  project_id  = $1
-           AND  user_id     = $2
-           AND  is_archived = false
-         RETURNING project_id`,
-        [id, userId]
-      );
-    } else {
-      // PM and admin can delete any project
-      result = await pool.query(
-        `UPDATE projects
-         SET    is_archived = true,
-                archived_at = NOW(),
-                updated_at  = NOW()
-         WHERE  project_id  = $1
-           AND  is_archived = false
-         RETURNING project_id`,
-        [id]
-      );
-    }
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Project not found or already archived.' });
-    }
-
-    return res.status(200).json({
-      success : true,
-      message : 'Project deleted successfully.',
-    });
-
-  } catch (err) {
-    console.error('DELETE /projects/:id error:', err.message);
-    return res.status(500).json({ error: 'Failed to delete project.' });
-  }
-});
-
-
-// ─────────────────────────────────────────────
-// GET /api/projects/:id
-// user        → own project only
-// project_manager → any project + user info
-// admin       → any project (including archived) + user info
-// ─────────────────────────────────────────────
-router.get('/:id', verifyToken, async (req, res) => {
-  const userId = req.user.user_id || req.user.id;
-  const { id } = req.params;
-  try {
-    let query, params;
-
-    if (req.user.role === 'user' || req.user.role === 'student') {
-      query = `
-        SELECT project_id, user_id, project_name, project_description,
-               file_size_bytes, is_archived, latest_prediction_id,
-               analysis_count, created_at, updated_at
-        FROM projects
-        WHERE project_id = $1 AND user_id = $2`;
-      params = [id, userId];  // ✅ userId (fixed)
-
-    } else if (req.user.role === 'project_manager') {
-      query = `
-        SELECT p.project_id, p.user_id, p.project_name, p.project_description,
-               p.file_size_bytes, p.is_archived, p.latest_prediction_id,
-               p.analysis_count, p.created_at, p.updated_at,
-               u.email, u.full_name
-        FROM projects p
-        JOIN users u ON p.user_id = u.user_id
-        WHERE p.project_id = $1 AND p.is_archived = false`;
-      params = [id];
-
-    } else if (req.user.role === 'admin') {
-      // Admin sees everything — including archived projects
-      query = `
-        SELECT p.project_id, p.user_id, p.project_name, p.project_description,
-               p.file_size_bytes, p.is_archived, p.latest_prediction_id,
-               p.analysis_count, p.created_at, p.updated_at, p.archived_at,
-               u.email, u.full_name, u.role AS user_role
-        FROM projects p
-        JOIN users u ON p.user_id = u.user_id
-        WHERE p.project_id = $1`;
-      params = [id];
-
-    } else {
-      return res.status(403).json({ error: 'Access denied.' });
-    }
-
-    const result = await pool.query(query, params);
-
-    if (result.rows.length === 0)
-      return res.status(404).json({ error: 'Project not found.' });
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error.' });
-  }
-});
-
-// ─────────────────────────────────────────────
 // GET /api/projects/:id/results
 // user        → own project results only
 // project_manager → any project results
@@ -542,7 +372,7 @@ router.get('/:id/report', verifyToken, async (req, res) => {
 
       // All predictions for this project (not just latest)
       const predictions = await pool.query(
-        'SELECT prediction_id, risk_level, confidence_score, created_at FROM predictions WHERE project_id = $1 ORDER BY created_at DESC',
+        'SELECT prediction_id, risk_level, risk_score, created_at FROM predictions WHERE project_id = $1 ORDER BY created_at DESC',
         [id]
       );
 
@@ -565,7 +395,7 @@ router.get('/:id/report', verifyToken, async (req, res) => {
       const riskTrend = predictions.rows.map(p => ({
         prediction_id: p.prediction_id,
         risk_level: p.risk_level,
-        confidence_score: p.confidence_score,
+        risk_score: p.risk_score,
         analysed_at: p.created_at
       }));
 
@@ -656,6 +486,54 @@ router.get('/:id/report', verifyToken, async (req, res) => {
   }
 });
 
+// ── GET /api/projects/:id/predictions — predictions for project
+
+router.get('/:id/predictions', verifyToken, async (req, res) => {
+  const userId = req.user.user_id || req.user.id;
+  const page   = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit  = Math.min(50,  parseInt(req.query.limit) || 10);
+  const offset = (page - 1) * limit;
+
+  try {
+    const project = await pool.query(
+      'SELECT user_id FROM projects WHERE project_id = $1',
+      [req.params.id]
+    );
+    if (!project.rows.length)
+      return res.status(404).json({ error: 'Project not found.' });
+    if (project.rows[0].user_id !== userId && req.user.role !== 'admin')
+      return res.status(403).json({ error: 'Access denied.' });
+
+    const [data, count] = await Promise.all([
+      pool.query(
+        `SELECT prediction_id, risk_level, risk_score, model_version,
+                inference_duration_ms, shap_computation_duration_ms,
+                is_cached, created_at
+         FROM predictions
+         WHERE project_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.id, limit, offset]
+      ),
+      pool.query(
+        'SELECT COUNT(*) AS total FROM predictions WHERE project_id = $1',
+        [req.params.id]
+      ),
+    ]);
+
+    const total = parseInt(count.rows[0].total);
+    res.json({
+      predictions: data.rows,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
 
 
 // ─────────────────────────────────────────────
@@ -714,52 +592,175 @@ router.patch('/:id/unarchive',
   }
 );
 
-// ── GET /api/projects/:id/predictions — predictions for project
 
-router.get('/:id/predictions', verifyToken, async (req, res) => {
+// ─────────────────────────────────────────────
+// GET /api/projects/:id
+// user        → own project only
+// project_manager → any project + user info
+// admin       → any project (including archived) + user info
+// ─────────────────────────────────────────────
+router.get('/:id', verifyToken, async (req, res) => {
   const userId = req.user.user_id || req.user.id;
-  const page   = Math.max(1, parseInt(req.query.page)  || 1);
-  const limit  = Math.min(50,  parseInt(req.query.limit) || 10);
-  const offset = (page - 1) * limit;
-
+  const { id } = req.params;
   try {
-    const project = await pool.query(
-      'SELECT user_id FROM projects WHERE project_id = $1',
-      [req.params.id]
-    );
-    if (!project.rows.length)
-      return res.status(404).json({ error: 'Project not found.' });
-    if (project.rows[0].user_id !== userId && req.user.role !== 'admin')
+    let query, params;
+
+    if (req.user.role === 'user' || req.user.role === 'student') {
+      query = `
+        SELECT project_id, user_id, project_name, project_description,
+               file_size_bytes, is_archived, latest_prediction_id,
+               analysis_count, created_at, updated_at
+        FROM projects
+        WHERE project_id = $1 AND user_id = $2`;
+      params = [id, userId];  // ✅ userId (fixed)
+
+    } else if (req.user.role === 'project_manager') {
+      query = `
+        SELECT p.project_id, p.user_id, p.project_name, p.project_description,
+               p.file_size_bytes, p.is_archived, p.latest_prediction_id,
+               p.analysis_count, p.created_at, p.updated_at,
+               u.email, u.full_name
+        FROM projects p
+        JOIN users u ON p.user_id = u.user_id
+        WHERE p.project_id = $1 AND p.is_archived = false`;
+      params = [id];
+
+    } else if (req.user.role === 'admin') {
+      // Admin sees everything — including archived projects
+      query = `
+        SELECT p.project_id, p.user_id, p.project_name, p.project_description,
+               p.file_size_bytes, p.is_archived, p.latest_prediction_id,
+               p.analysis_count, p.created_at, p.updated_at, p.archived_at,
+               u.email, u.full_name, u.role AS user_role
+        FROM projects p
+        JOIN users u ON p.user_id = u.user_id
+        WHERE p.project_id = $1`;
+      params = [id];
+
+    } else {
       return res.status(403).json({ error: 'Access denied.' });
+    }
 
-    const [data, count] = await Promise.all([
-      pool.query(
-        `SELECT prediction_id, risk_level, risk_score, model_version,
-                inference_duration_ms, shap_computation_duration_ms,
-                is_cached, created_at
-         FROM predictions
-         WHERE project_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2 OFFSET $3`,
-        [req.params.id, limit, offset]
-      ),
-      pool.query(
-        'SELECT COUNT(*) AS total FROM predictions WHERE project_id = $1',
-        [req.params.id]
-      ),
-    ]);
+    const result = await pool.query(query, params);
 
-    const total = parseInt(count.rows[0].total);
-    res.json({
-      predictions: data.rows,
-      total,
-      page,
-      limit,
-      pages: Math.ceil(total / limit),
-    });
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: 'Project not found.' });
+
+    res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error.' });
   }
 });
+
+// ─────────────────────────────────────────────
+// PUT /api/projects/:id
+// Update project name or description
+// user → own project only
+// admin/pm → any project
+// ─────────────────────────────────────────────
+router.put('/:id', verifyToken, async (req, res) => {
+  const userId = req.user.user_id || req.user.id;
+  const { id } = req.params;
+  const { project_name, project_description } = req.body;
+
+  if (!project_name && project_description === undefined) {
+    return res.status(400).json({ error: 'Nothing to update.' });
+  }
+
+  try {
+    let result;
+
+    if (req.user.role === 'user' || req.user.role === 'student') {
+      // Users can only update their own projects
+      result = await pool.query(
+        `UPDATE projects
+         SET    project_name        = COALESCE($1, project_name),
+                project_description = COALESCE($2, project_description),
+                updated_at          = NOW()
+         WHERE  project_id = $3 AND user_id = $4
+         RETURNING project_id, project_name, project_description, updated_at`,
+        [project_name || null, project_description || null, id, userId]
+      );
+    } else {
+      // PM and admin can update any project
+      result = await pool.query(
+        `UPDATE projects
+         SET    project_name        = COALESCE($1, project_name),
+                project_description = COALESCE($2, project_description),
+                updated_at          = NOW()
+         WHERE  project_id = $3
+         RETURNING project_id, project_name, project_description, updated_at`,
+        [project_name || null, project_description || null, id]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    return res.status(200).json({ project: result.rows[0] });
+
+  } catch (err) {
+    console.error('PUT /projects/:id error:', err.message);
+    return res.status(500).json({ error: 'Failed to update project.' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// DELETE /api/projects/:id
+// Soft delete — archives the project
+// user → own project only
+// admin/pm → any project
+// ─────────────────────────────────────────────
+router.delete('/:id', verifyToken, async (req, res) => {
+  const userId = req.user.user_id || req.user.id;
+  const { id } = req.params;
+
+  try {
+    let result;
+
+    if (req.user.role === 'user' || req.user.role === 'student') {
+      // Users can only delete their own projects
+      result = await pool.query(
+        `UPDATE projects
+         SET    is_archived = true,
+                archived_at = NOW(),
+                updated_at  = NOW()
+         WHERE  project_id  = $1
+           AND  user_id     = $2
+           AND  is_archived = false
+         RETURNING project_id`,
+        [id, userId]
+      );
+    } else {
+      // PM and admin can delete any project
+      result = await pool.query(
+        `UPDATE projects
+         SET    is_archived = true,
+                archived_at = NOW(),
+                updated_at  = NOW()
+         WHERE  project_id  = $1
+           AND  is_archived = false
+         RETURNING project_id`,
+        [id]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found or already archived.' });
+    }
+
+    return res.status(200).json({
+      success : true,
+      message : 'Project deleted successfully.',
+    });
+
+  } catch (err) {
+    console.error('DELETE /projects/:id error:', err.message);
+    return res.status(500).json({ error: 'Failed to delete project.' });
+  }
+});
+
+
 module.exports = router;
