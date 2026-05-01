@@ -213,8 +213,10 @@ router.get('/dashboard', ...DBA_ONLY, async (req, res) => {
         LIMIT 12`),
 
       pool.query(`
-        SELECT COUNT(*) AS count FROM audit_logs
-        WHERE status = 'FAILED'`),
+       SELECT COUNT(*) AS count FROM audit_logs
+       WHERE status = 'FAILED'
+       AND action LIKE 'PROJECT_%'`),
+
 
       pool.query('SELECT COUNT(*) AS total FROM users'),
 
