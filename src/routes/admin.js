@@ -221,8 +221,11 @@ router.get('/dashboard', ...DBA_ONLY, async (req, res) => {
       pool.query('SELECT COUNT(*) AS total FROM users'),
 
       pool.query(`
-        SELECT COUNT(*) AS total FROM projects
-        WHERE is_archived = false`)
+       SELECT 
+       COUNT(*) AS total,
+       COUNT(*) FILTER (WHERE is_archived = false) AS active,
+       COUNT(*) FILTER (WHERE is_archived = true) AS archived
+       FROM projects`)
     ]);
 
    const totalScans  = parseInt(scans.rows[0].total);
@@ -243,6 +246,8 @@ router.get('/dashboard', ...DBA_ONLY, async (req, res) => {
       failedScans:     failedCount,
       totalUsers:       parseInt(users.rows[0].total),
       totalProjects:    parseInt(projects.rows[0].total),
+      activeProjects:   parseInt(projects.rows[0].active),
+      archivedProjects: parseInt(projects.rows[0].archived),
       avgRisk:          totalScans > 0
         ? parseFloat((riskDist.rows.reduce((sum, r) => {
             const w = r.risk_level === 'HIGH' ? 0.65
