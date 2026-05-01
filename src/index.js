@@ -14,7 +14,7 @@ const analysisRoutes = require('./routes/analysis');
 
 require('./db');
 require('./workers/analysisQueue');
- 
+
 const app = express();
 
 app.use(helmet());
@@ -39,6 +39,11 @@ app.use('/api/dashboard',   dashboardRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/analysis', analysisRoutes);
 
+// Add this before your other routes
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'Veracity Backend' });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -52,6 +57,6 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Backend running on port ${PORT}`);
 });
