@@ -14,10 +14,17 @@ router.post('/start', verifyToken, async (req, res) => {
   if (!session_id || !risk_level || !top_features)
     return res.status(400).json({ error: 'session_id, risk_level, top_features required.' });
 
+  // ✅ Fix: Ensure top_features is array of objects
+  const formattedFeatures = top_features.map(f => 
+    typeof f === 'string' 
+      ? { feature: f, shap_value: 0, metric_value: 0 }
+      : f
+  );
+
   try {
     const mlRes = await axios.post(
       `${process.env.ML_WORKER_URL}/chat/start`,
-      { session_id, risk_level, top_features, user_name },
+      { session_id, risk_level, top_features: formattedFeatures, user_name },
       { timeout: 30000 }
     );
     res.json(mlRes.data);
@@ -35,16 +42,21 @@ router.post('/message', verifyToken, async (req, res) => {
   if (!session_id || !message)
     return res.status(400).json({ error: 'session_id and message required.' });
 
+  // ✅ Fix: message must be a string
+  const safeMessage = String(message).trim();
+  if (!safeMessage)
+    return res.status(400).json({ error: 'message cannot be empty.' });
+
   try {
     const mlRes = await axios.post(
       `${process.env.ML_WORKER_URL}/chat/message`,
-      { session_id, message, user_name },
+      { session_id, message: safeMessage, user_name },
       { timeout: 30000 }
     );
     res.json(mlRes.data);
   } catch (err) {
-    console.error('Chat message error:', err.message);
-    res.status(500).json({ error: 'Chatbot unavailable.' });
+    console.error('Chat message error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Chatbot unavailable.', detail: err.response?.data });
   }
 });
 
@@ -55,6 +67,7 @@ router.post('/reset', verifyToken, async (req, res) => {
   if (!session_id)
     return res.status(400).json({ error: 'session_id required.' });
 
+  
   try {
     const mlRes = await axios.post(
       `${process.env.ML_WORKER_URL}/chat/reset?session_id=${session_id}`,
