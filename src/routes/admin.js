@@ -224,7 +224,8 @@ router.get('/dashboard', ...DBA_ONLY, async (req, res) => {
     ]);
 
    const totalScans  = parseInt(scans.rows[0].total);
-   const failedCount = Math.min(parseInt(failedLogs.rows[0].count), totalScans);
+   const failedCount = parseInt(failedLogs.rows[0].count);
+   const successCount = Math.max(0, totalScans - failedCount);
 
     // Map colors for frontend pie chart
     const colorMap = {
@@ -236,8 +237,8 @@ router.get('/dashboard', ...DBA_ONLY, async (req, res) => {
 
     res.json({
       totalScans,
-      successfulScans:  totalScans - failedCount,
-      failedScans:      failedCount,
+      successfulScans: successCount,
+      failedScans:     failedCount,
       totalUsers:       parseInt(users.rows[0].total),
       totalProjects:    parseInt(projects.rows[0].total),
       avgRisk:          totalScans > 0
