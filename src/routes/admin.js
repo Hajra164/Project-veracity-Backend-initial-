@@ -126,7 +126,7 @@ router.get('/logs/:id', ...DBA_ONLY, async (req, res) => {
       SELECT a.*, u.email AS user_name, u.role
       FROM audit_logs a
       LEFT JOIN users u ON a.user_id = u.user_id
-      WHERE a.log_id = $1`, [req.params.id]);
+      WHERE a.audit_log_id = $1`, [req.params.id]);
 
     if (result.rows.length === 0)
       return res.status(404).json({ error: 'Log not found.' });
@@ -223,8 +223,8 @@ router.get('/dashboard', ...DBA_ONLY, async (req, res) => {
         WHERE is_archived = false`)
     ]);
 
-    const totalScans  = parseInt(scans.rows[0].total);
-    const failedCount = parseInt(failedLogs.rows[0].count);
+   const totalScans  = parseInt(scans.rows[0].total);
+   const failedCount = Math.min(parseInt(failedLogs.rows[0].count), totalScans);
 
     // Map colors for frontend pie chart
     const colorMap = {
@@ -271,7 +271,7 @@ router.get('/logs', ...DBA_ONLY, async (req, res) => {
     const [data, count] = await Promise.all([
       pool.query(`
         SELECT
-          a.log_id        AS id,
+          a.audit_log_id  AS id,
           a.user_id,
           a.action,
           a.resource_type,
