@@ -129,11 +129,11 @@ router.post('/create', verifyToken, async (req, res) => {
 
     // Log payment attempt
     await pool.query(
-      `INSERT INTO audit_logs 
-         (user_id, action, resource_type, resource_id, status, ip_address)
-       VALUES ($1, 'PAYMENT_INITIATED', 'payment', $1, 'PENDING', $2)`,
-      [userId, req.ip]
-    );
+    `INSERT INTO audit_logs 
+     (user_id, action, resource_type, resource_id, status, ip_address)
+     VALUES ($1, 'PAYMENT_INITIATED', 'payment', NULL, 'SUCCESS', $2)`,
+    [userId, req.ip]
+ );
 
     res.json({
       checkout_url : checkoutUrl,
@@ -173,21 +173,22 @@ router.post('/create', verifyToken, async (req, res) => {
         [userId]
       );
 
-      await pool.query(
-        `INSERT INTO audit_logs
-           (user_id, action, resource_type, resource_id, status, ip_address)
-         VALUES ($1, 'PAYMENT_COMPLETE', 'payment', $1, 'SUCCESS', $2)`,
-        [userId, req.ip]
-      );
+    await pool.query(
+     `INSERT INTO audit_logs
+      (user_id, action, resource_type, resource_id, status, ip_address)
+      VALUES ($1, 'PAYMENT_COMPLETE', 'payment', NULL, 'SUCCESS', $2)`,
+    [userId, req.ip]
+);
 
       console.log(`User ${userId} upgraded to pro — R${amount}`);
     } else {
-      await pool.query(
-        `INSERT INTO audit_logs
-           (user_id, action, resource_type, resource_id, status, ip_address, error_message)
-         VALUES ($1, 'PAYMENT_FAILED', 'payment', $1, 'FAILED', $2, $3)`,
-        [userId, req.ip, paymentStatus]
-      );
+    await pool.query(
+    `INSERT INTO audit_logs
+      (user_id, action, resource_type, resource_id, status, ip_address, error_message)
+     VALUES ($1, 'PAYMENT_FAILED', 'payment', NULL, 'FAILED', $2, $3)`,
+   [userId, req.ip, paymentStatus]
+ );
+
 
       console.warn(`Payment failed for user ${userId} — status: ${paymentStatus}`);
     }
@@ -206,10 +207,11 @@ router.post('/create', verifyToken, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 router.get('/status', verifyToken, async (req, res) => {
   try {
+    const userId = req.user.user_id || req.user.id;
     const result = await pool.query(
-      'SELECT tier FROM users WHERE user_id = $1',
-      [req.user.user_id]
-    );
+     'SELECT tier FROM users WHERE user_id = $1',
+     [userId]
+  );
     if (!result.rows.length)
       return res.status(404).json({ error: 'User not found.' });
 
