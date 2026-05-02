@@ -10,6 +10,7 @@ const { verifyToken } = require('../middleware/auth');
 // ═══════════════════════════════════════════════════════════════
 //  PAYFAST CONFIG
 // ═══════════════════════════════════════════════════════════════
+
 const PF = {
   merchantId  : process.env.PAYFAST_MERCHANT_ID,
   merchantKey : process.env.PAYFAST_MERCHANT_KEY,
@@ -149,7 +150,7 @@ router.post('/create', verifyToken, async (req, res) => {
 //  POST /api/payment/notify — PayFast ITN webhook (no auth)
 //  PayFast hits this URL directly after payment
 // ═══════════════════════════════════════════════════════════════
-router.post('/notify', express.urlencoded({ extended: false }), async (req, res) => {
+  router.post('/notify', async (req, res) => {
   try {
     const pfData       = req.body;
     const pfParamString = new URLSearchParams(pfData).toString();
