@@ -24,16 +24,21 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const BACKEND_URL  = process.env.BACKEND_URL  || 'http://localhost:5000';
 
 // ═══════════════════════════════════════════════════════════════
-//  HELPER — generate MD5 signature
+//  HELPER — generate MD5 signature (PayFast strict format)
 // ═══════════════════════════════════════════════════════════════
 function generateSignature(data, passphrase = null) {
-  // Build query string in exact key order PayFast expects
-  let str = Object.entries(data)
-    .map(([k, v]) => `${k}=${encodeURIComponent(String(v).trim())}`)
+  // Remove signature field if present
+  const filteredData = Object.fromEntries(
+    Object.entries(data).filter(([k]) => k !== 'signature')
+  );
+
+  // PayFast requires specific encoding — spaces as +, not %20
+  let str = Object.entries(filteredData)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v).trim()).replace(/%20/g, '+')}`)
     .join('&');
 
   if (passphrase) {
-    str += `&passphrase=${encodeURIComponent(passphrase.trim())}`;
+    str += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`;
   }
 
   return crypto.createHash('md5').update(str).digest('hex');
@@ -52,16 +57,7 @@ async function verifyITN(pfData, pfParamString) {
   );
   if (signature !== pfData['signature']) return false;
 
-  // Step 2 — Verify source IP is PayFast
-  const validHosts = [
-    'sandbox.payfast.co.za',
-    'www.payfast.co.za',
-    'w1w.payfast.co.za',
-    'w2w.payfast.co.za',
-  ];
-  // (IP check is optional in sandbox — skipped here)
-
-  // Step 3 — Verify data with PayFast server
+  // Step 2 — Verify data with PayFast server
   try {
     const response = await axios.post(
       `https://${PF.host}/eng/query/validate`,
@@ -99,41 +95,43 @@ router.post('/create', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'You are already on the Pro plan.' });
 
     // Split name safely
-    const nameParts  = (user.full_name || 'Veracity User').trim().split(' ');
-    const firstName  = nameParts[0] || 'Veracity';
-    const lastName   = nameParts.slice(1).join(' ') || 'User';
+    const nameParts = (user.full_name || 'Veracity User').trim().split(' ');
+    const firstName = nameParts[0] || 'Veracity';
+    const lastName  = nameParts.slice(1).join(' ') || 'User';
 
     // Build PayFast payment data — ORDER MATTERS for signature
     const paymentData = {
-      merchant_id   : PF.merchantId,
-      merchant_key  : PF.merchantKey,
-      return_url    : `${FRONTEND_URL}/payment/success`,
-      cancel_url    : `${FRONTEND_URL}/payment/cancel`,
-      notify_url    : `${BACKEND_URL}/api/payment/notify`,
-      name_first    : firstName,
-      name_last     : lastName,
-      email_address : user.email,
-      m_payment_id  : `${userId}_${Date.now()}`,   // unique per payment
-      amount        : '99.00',                      // your pro plan price
-      item_name     : 'Veracity Pro Plan',
-      item_description: 'Monthly subscription to Veracity Pro',
-      custom_int1   : userId,                       // stored for ITN lookup
+      merchant_id      : PF.merchantId,
+      merchant_key     : PF.merchantKey,
+      return_url       : `${FRONTEND_URL}/payment/success`,
+      cancel_url       : `${FRONTEND_URL}/payment/cancel`,
+      notify_url       : `${BACKEND_URL}/api/payment/notify`,
+      name_first       : firstName,
+      name_last        : lastName,
+      email_address    : user.email,
+      m_payment_id     : `${userId}_${Date.now()}`,
+      amount           : '99.00',
+      item_name        : 'Veracity Pro Plan',
+      item_description : 'Monthly subscription to Veracity Pro',
+      custom_int1      : userId,
     };
 
     // Generate signature
     paymentData.signature = generateSignature(paymentData, PF.passphrase);
 
-    // Build checkout URL with query params
-    const params      = new URLSearchParams(paymentData).toString();
+    // Build checkout URL — same encoding as signature
+    const params = Object.entries(paymentData)
+      .map(([k, v]) => `${k}=${encodeURIComponent(String(v).trim()).replace(/%20/g, '+')}`)
+      .join('&');
     const checkoutUrl = `${PF.url}?${params}`;
 
     // Log payment attempt
     await pool.query(
-    `INSERT INTO audit_logs 
-     (user_id, action, resource_type, resource_id, status, ip_address)
-     VALUES ($1, 'PAYMENT_INITIATED', 'payment', NULL, 'SUCCESS', $2)`,
-    [userId, req.ip]
- );
+      `INSERT INTO audit_logs 
+       (user_id, action, resource_type, resource_id, status, ip_address)
+       VALUES ($1, 'PAYMENT_INITIATED', 'payment', NULL, 'SUCCESS', $2)`,
+      [userId, req.ip]
+    );
 
     res.json({
       checkout_url : checkoutUrl,
@@ -148,52 +146,44 @@ router.post('/create', verifyToken, async (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════
 //  POST /api/payment/notify — PayFast ITN webhook (no auth)
-//  PayFast hits this URL directly after payment
 // ═══════════════════════════════════════════════════════════════
-  router.post('/notify', async (req, res) => {
+router.post('/notify', async (req, res) => {
   try {
-    const pfData       = req.body;
+    const pfData        = req.body;
     const pfParamString = new URLSearchParams(pfData).toString();
 
-    // Verify the notification is genuine
     const isValid = await verifyITN(pfData, pfParamString);
     if (!isValid) {
       console.warn('PayFast ITN verification failed');
       return res.status(400).send('Invalid ITN');
     }
 
-    const userId      = pfData.custom_int1;
-    const paymentStatus = pfData.payment_status; // 'COMPLETE' or 'FAILED'
-    const amount      = parseFloat(pfData.amount_gross);
+    const userId        = pfData.custom_int1;
+    const paymentStatus = pfData.payment_status;
+    const amount        = parseFloat(pfData.amount_gross);
 
     if (paymentStatus === 'COMPLETE') {
-      // Upgrade user to pro
       await pool.query(
         `UPDATE users SET tier = 'pro', updated_at = NOW() WHERE user_id = $1`,
         [userId]
       );
-
-    await pool.query(
-     `INSERT INTO audit_logs
-      (user_id, action, resource_type, resource_id, status, ip_address)
-      VALUES ($1, 'PAYMENT_COMPLETE', 'payment', NULL, 'SUCCESS', $2)`,
-    [userId, req.ip]
-);
-
-      console.log(`User ${userId} upgraded to pro — R${amount}`);
+      await pool.query(
+        `INSERT INTO audit_logs
+         (user_id, action, resource_type, resource_id, status, ip_address)
+         VALUES ($1, 'PAYMENT_COMPLETE', 'payment', NULL, 'SUCCESS', $2)`,
+        [userId, req.ip]
+      );
+      console.log(`✅ User ${userId} upgraded to pro — R${amount}`);
     } else {
-    await pool.query(
-    `INSERT INTO audit_logs
-      (user_id, action, resource_type, resource_id, status, ip_address, error_message)
-     VALUES ($1, 'PAYMENT_FAILED', 'payment', NULL, 'FAILED', $2, $3)`,
-   [userId, req.ip, paymentStatus]
- );
-
-
-      console.warn(`Payment failed for user ${userId} — status: ${paymentStatus}`);
+      await pool.query(
+        `INSERT INTO audit_logs
+         (user_id, action, resource_type, resource_id, status, ip_address, error_message)
+         VALUES ($1, 'PAYMENT_FAILED', 'payment', NULL, 'FAILED', $2, $3)`,
+        [userId, req.ip, paymentStatus]
+      );
+      console.warn(`❌ Payment failed for user ${userId} — status: ${paymentStatus}`);
     }
 
-    // PayFast expects 200 OK
     res.status(200).send('OK');
 
   } catch (err) {
@@ -209,9 +199,9 @@ router.get('/status', verifyToken, async (req, res) => {
   try {
     const userId = req.user.user_id || req.user.id;
     const result = await pool.query(
-     'SELECT tier FROM users WHERE user_id = $1',
-     [userId]
-  );
+      'SELECT tier FROM users WHERE user_id = $1',
+      [userId]
+    );
     if (!result.rows.length)
       return res.status(404).json({ error: 'User not found.' });
 
