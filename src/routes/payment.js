@@ -82,7 +82,7 @@ async function verifyITN(pfData, pfParamString) {
 // ═══════════════════════════════════════════════════════════════
 router.post('/create', verifyToken, async (req, res) => {
   try {
-    const userId = req.user.user_id;
+    const userId = req.user.user_id || req.user.id;
 
     // Fetch user details
     const result = await pool.query(
