@@ -19,16 +19,27 @@ require('./workers/analysisQueue');
 const app = express();
 
 app.use(helmet());
-app.use(cors({ 
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'https://project-veracity-backend-initial-production-be6f.up.railway.app',
-    'https://veracity-delta.vercel.app',
-  ],
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow Postman and server-to-server calls (no origin)
+    if (!origin) return callback(null, true);
+ 
+    const allowed = [
+      'http://localhost:3000',
+      'http://localhost:5000',
+      'https://project-veracity-backend-initial-production-be6f.up.railway.app',
+    ];
+ 
+    // Allow any Vercel URL — covers all preview + production URLs
+   if (origin.endsWith('.vercel.app') || allowed.includes(origin)) {
+      return callback(null, true);
+    }
+ 
+    return callback(new Error('CORS not allowed: ' + origin));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
