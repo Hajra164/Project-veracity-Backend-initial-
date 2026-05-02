@@ -23,9 +23,11 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost:5000',
-    'https://project-veracity-backend-initial-production-be6f.up.railway.app'
+    'https://project-veracity-backend-initial-production-be6f.up.railway.app',
+    'https://veracity-delta.vercel.app',
   ],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
