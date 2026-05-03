@@ -17,7 +17,22 @@ const verifyToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+
+    // ── DB se fresh role aur tier lo ──────────────────
+    const userResult = await pool.query(
+      'SELECT role, tier, is_active FROM users WHERE user_id = $1',
+      [decoded.user_id]
+    );
+    if (!userResult.rows.length || !userResult.rows[0].is_active)
+      return res.status(401).json({ error: 'User not found or deactivated.' });
+
+    req.user = {
+      ...decoded,
+      role : userResult.rows[0].role,  // ← DB se fresh
+      tier : userResult.rows[0].tier,  // ← DB se fresh ✅
+    };
+    // ──────────────────────────────────────────────────
+
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token.' });
@@ -41,6 +56,7 @@ const requireTier = (tier) => {
     next();
   };
 };
+
 /**
  * Guards PDF format access by role + tier.
  *
@@ -48,14 +64,18 @@ const requireTier = (tier) => {
  *   student            → PDF always allowed (free perk)
  *   user pro / admin   → PDF allowed
  *   user free          → PDF blocked
- *   project_manager    → handled by requireTier separately
+ *   project_manager pro → PDF allowed
  */
 const requirePdfAccess = (req, res, next) => {
   const { role, tier } = req.user;
-  const format = req.query.format || req.body?.format;
 
-  // Only intervene for PDF requests
-  if (format !== 'pdf') return next();
+  // URL path se pdf detect karo
+  const isPdfRequest = req.path.endsWith('/pdf') ||
+                       req.query.format === 'pdf' ||
+                       req.body?.format === 'pdf';
+
+  // PDF request nahi → allow
+  if (!isPdfRequest) return next();
 
   // Admins always pass
   if (role === 'admin') return next();
@@ -66,7 +86,7 @@ const requirePdfAccess = (req, res, next) => {
   // Pro users pass
   if (tier === 'pro') return next();
 
-  // Everyone else (user free, etc.) is blocked
+  // Everyone else blocked
   return res.status(403).json({
     error: 'PDF reports require Pro tier. Please upgrade your plan.',
   });
