@@ -105,6 +105,10 @@ async function checkChatLimit(userId, tier) {
 //  Initialize chat session with project context
 // ═══════════════════════════════════════════════════════════════
 router.post('/start', verifyToken, async (req, res) => {
+  console.log('GROQ_API_KEY set:', !!process.env.GROQ_API_KEY);  // ← add this
+  console.log('Request body:', req.body);                         // ← add this
+  
+router.post('/start', verifyToken, async (req, res) => {
   const { session_id, project_id, risk_level, top_features } = req.body;
   const userId = req.user.user_id;
   const tier   = req.user.tier || 'free';
