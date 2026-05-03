@@ -10,7 +10,7 @@ require('dotenv').config();
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL   = 'llama3-70b-8192';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 // ── In-memory session store ───────────────────
 // Stores conversation history per session
@@ -104,10 +104,6 @@ async function checkChatLimit(userId, tier) {
 //  POST /api/chat/start
 //  Initialize chat session with project context
 // ═══════════════════════════════════════════════════════════════
-router.post('/start', verifyToken, async (req, res) => {
-  console.log('GROQ_API_KEY set:', !!process.env.GROQ_API_KEY);  // ← add this
-  console.log('Request body:', req.body);                         // ← add this
-  
 router.post('/start', verifyToken, async (req, res) => {
   const { session_id, project_id, risk_level, top_features } = req.body;
   const userId = req.user.user_id;
