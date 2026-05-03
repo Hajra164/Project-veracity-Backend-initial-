@@ -198,10 +198,10 @@ router.post('/start', verifyToken, async (req, res) => {
       session_id,
       message  : welcome,
       context,
-      limit    : {
+      limit   : {
         used     : limitCheck.used,
-        remaining: limitCheck.remaining,
-        limit    : limitCheck.limit,
+        remaining: limitCheck.limit === Infinity ? 'unlimited' : limitCheck.remaining,
+        limit    : limitCheck.limit === Infinity ? 'unlimited' : limitCheck.limit,
       },
     });
 
@@ -278,9 +278,9 @@ router.post('/message', verifyToken, async (req, res) => {
       session_id,
       message : reply,
       limit   : {
-        used     : limitCheck.used + 1,
-        remaining: Math.max(0, limitCheck.remaining - 1),
-        limit    : limitCheck.limit,
+       used     : limitCheck.used,
+       remaining: limitCheck.limit === Infinity ? 'unlimited' : limitCheck.remaining,
+       limit    : limitCheck.limit === Infinity ? 'unlimited' : limitCheck.limit,
       },
     });
 
