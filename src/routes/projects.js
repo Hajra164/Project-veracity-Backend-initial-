@@ -165,6 +165,21 @@ router.post('/', verifyToken, upload.single('file'), async (req, res) => {
   if (!req.file)
     return res.status(400).json({ error: 'No .py file uploaded.' });
 
+// ── Project limit check (free users) ────────────────
+  if (req.user.tier === 'free') {
+    const count = await pool.query(
+      `SELECT COUNT(*) FROM projects 
+       WHERE user_id = $1 AND is_archived = false`,
+      [userId]
+    );
+    if (parseInt(count.rows[0].count) >= 5) {
+      return res.status(403).json({ 
+        error: 'Free users can only have 5 active projects. Upgrade to Pro for unlimited projects.',
+        upgrade_required: true
+      });
+    }
+  }
+
   try {
     const fileBuffer = fs.readFileSync(req.file.path);
     const fileSize = req.file.size;
