@@ -551,24 +551,39 @@ router.get('/:id/predictions', verifyToken, async (req, res) => {
   }
 });
 
-
 // ─────────────────────────────────────────────
 // PATCH /api/projects/:id/archive
-// project_manager + admin only
+// user/student → apna project archive kar sakte hain
+// project_manager + admin → koi bhi project
 // ─────────────────────────────────────────────
 router.patch('/:id/archive',
   verifyToken,
-  requireRole('project_manager', 'admin'),
   async (req, res) => {
+    const userId = req.user.user_id || req.user.id;
     const { id } = req.params;
     try {
-      const result = await pool.query(
-        `UPDATE projects
-         SET is_archived = true, archived_at = NOW(), updated_at = NOW()
-         WHERE project_id = $1
-         RETURNING project_id, project_name`,
-        [id]
-      );
+      let result;
+
+      if (req.user.role === 'user' || req.user.role === 'student') {
+        // User sirf apna project archive kar sakta hai
+        result = await pool.query(
+          `UPDATE projects
+           SET is_archived = true, archived_at = NOW(), updated_at = NOW()
+           WHERE project_id = $1 AND user_id = $2
+           RETURNING project_id, project_name`,
+          [id, userId]
+        );
+      } else {
+        // PM aur admin koi bhi project archive kar sakte hain
+        result = await pool.query(
+          `UPDATE projects
+           SET is_archived = true, archived_at = NOW(), updated_at = NOW()
+           WHERE project_id = $1
+           RETURNING project_id, project_name`,
+          [id]
+        );
+      }
+
       if (result.rows.length === 0)
         return res.status(404).json({ error: 'Project not found.' });
 
@@ -579,7 +594,6 @@ router.patch('/:id/archive',
     }
   }
 );
-
 // ─────────────────────────────────────────────
 // PATCH /api/projects/:id/unarchive
 // admin only
