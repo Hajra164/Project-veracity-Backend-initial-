@@ -29,8 +29,16 @@ const logAudit = async (userId, action, resourceType, resourceId, status, ipAddr
 router.post('/register', async (req, res) => {
   const { email, password, role: requestedRole } = req.body;
 
+  // Auto-detect university email
+  const studentDomains = ['.edu', '.ac.pk', '.edu.pk', '.ac.uk', '.edu.au', '.ac.in'];
+  const isUniversityEmail = studentDomains.some(domain =>
+  email.toLowerCase().endsWith(domain)
+);
+
+// University email → auto student, Normal email → user
   const SELF_REGISTER_ROLES = ['user', 'student'];
-  const role = SELF_REGISTER_ROLES.includes(requestedRole) ? requestedRole : 'user';
+  const role = isUniversityEmail ? 'student' :
+  (SELF_REGISTER_ROLES.includes(requestedRole) ? requestedRole : 'user');
   const ip = req.ip || req.connection.remoteAddress;
   const userAgent = req.headers['user-agent'] || 'unknown';
 
