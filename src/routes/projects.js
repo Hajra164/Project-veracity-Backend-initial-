@@ -501,6 +501,109 @@ router.get('/:id/report', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error.' });
   }
 });
+// ─────────────────────────────────────────────
+// GET /api/projects/:id/mitigation
+// Get mitigation advice based on top SHAP features
+// user/student → own project only | pm/admin → any project
+// ─────────────────────────────────────────────
+router.get('/:id/mitigation', verifyToken, async (req, res) => {
+  const userId = req.user.user_id || req.user.id;
+  const role   = req.user.role;
+  const { id } = req.params;
+
+  try {
+    // ── Step 1: Project access check ──────────────────────
+    let projectQuery, projectParams;
+    if (role === 'user' || role === 'student') {
+      projectQuery  = `SELECT project_id FROM projects 
+                       WHERE project_id = $1 AND user_id = $2 AND is_archived = false`;
+      projectParams = [id, userId];
+    } else {
+      projectQuery  = `SELECT project_id FROM projects WHERE project_id = $1`;
+      projectParams = [id];
+    }
+
+    const projectResult = await pool.query(projectQuery, projectParams);
+    if (projectResult.rows.length === 0)
+      return res.status(404).json({ error: 'Project not found.' });
+
+    // ── Step 2: Latest prediction ──────────────────────────
+    const predResult = await pool.query(
+      `SELECT prediction_id, risk_level, risk_score
+       FROM predictions
+       WHERE project_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [id]
+    );
+    if (predResult.rows.length === 0)
+      return res.status(404).json({
+        error: 'No analysis found. Please run an analysis first.'
+      });
+
+    const prediction = predResult.rows[0];
+
+    // ── Step 3: Top SHAP features ──────────────────────────
+    const shapResult = await pool.query(
+      `SELECT feature_name, feature_value, shap_value, feature_rank
+       FROM shap_explanations
+       WHERE prediction_id = $1
+       ORDER BY feature_rank ASC LIMIT 5`,
+      [prediction.prediction_id]
+    );
+    if (shapResult.rows.length === 0)
+      return res.status(404).json({
+        error: 'No SHAP features found for this analysis.'
+      });
+
+    const featureNames = shapResult.rows.map(r => r.feature_name);
+
+    // ── Step 4: Match mitigation_rules ────────────────────
+    const placeholders = featureNames.map((_, i) => `$${i + 1}`).join(', ');
+    const rulesResult  = await pool.query(
+      `SELECT risk_driver, mitigation_advice, priority, threshold_low, threshold_high
+       FROM mitigation_rules
+       WHERE risk_driver IN (${placeholders}) AND is_active = true
+       ORDER BY
+         CASE priority
+           WHEN 'CRITICAL' THEN 1
+           WHEN 'HIGH'     THEN 2
+           WHEN 'MEDIUM'   THEN 3
+           WHEN 'LOW'      THEN 4
+         END ASC`,
+      featureNames
+    );
+
+    // ── Step 5: Combine SHAP + rules ──────────────────────
+    const strategies = shapResult.rows.map(shap => {
+      const rule = rulesResult.rows.find(r => r.risk_driver === shap.feature_name);
+      return {
+        feature_name:      shap.feature_name,
+        feature_value:     shap.feature_value,
+        shap_value:        shap.shap_value,
+        feature_rank:      shap.feature_rank,
+        impact:            shap.shap_value > 0 ? 'positive' : 'negative',
+        priority:          rule?.priority          || null,
+        mitigation_advice: rule?.mitigation_advice || null,
+        threshold_low:     rule?.threshold_low     || null,
+        threshold_high:    rule?.threshold_high    || null,
+        has_advice:        !!rule
+      };
+    });
+
+    res.json({
+      project_id: parseInt(id),
+      risk_level: prediction.risk_level,
+      risk_score: prediction.risk_score,
+      strategies,
+      total:      strategies.length,
+      has_advice: strategies.some(s => s.has_advice)
+    });
+
+  } catch (err) {
+    console.error('GET /projects/:id/mitigation error:', err.message);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
 
 // ── GET /api/projects/:id/predictions — predictions for project
 
