@@ -49,7 +49,7 @@ function calibrateRisk(mlResult) {
   if (
     risk_level === 'High' &&
     loc < 150 &&
-    cc < 10 &&
+    cc < 25 &&
     branchCount < 8
   ) {
     bug_probability  = bug_probability * 0.60;
@@ -68,7 +68,15 @@ function calibrateRisk(mlResult) {
     calibrated       = true;
     calibration_note = 'Low CC density: optimized code pattern detected';
   }
+// ── Rule 5: Probability 45% se kam → Low risk
+if (risk_level === 'High' && bug_probability < 0.45) {
+  risk_level       = 'Low';
+  calibrated       = true;
+  calibration_note = `Low probability override: ${bug_probability} < 0.45 threshold`;
+}
 
+
+  
   // ── Recalculate risk level ───────────────────
   if (calibrated) {
     risk_level = bug_probability >= 0.5 ? 'High' : 'Low';
