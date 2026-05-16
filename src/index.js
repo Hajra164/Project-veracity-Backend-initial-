@@ -12,6 +12,7 @@ const dashboardRoutes  = require('./routes/dashboard');
 const predictionRoutes = require('./routes/predictions');
 const analysisRoutes = require('./routes/analysis');
 const paymentRoutes = require('./routes/payment');
+const refactorRoutes = require('./routes/refactor');
 
 require('./db');
 require('./workers/analysisQueue');
@@ -53,6 +54,8 @@ app.use('/api/dashboard',   dashboardRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/analysis', analysisRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/refactor', refactorRoutes);
+
 // Add this before your other routes
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Veracity Backend' });
