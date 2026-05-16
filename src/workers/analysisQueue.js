@@ -2,6 +2,7 @@ const axios = require('axios');
 const pool = require('../db');
 const FormData = require('form-data');
 const fs = require('fs');
+const { calibrateRisk } = require('../reports/utils/calibration');
 require('dotenv').config();
 
 const analyzeProject = async (projectId, fileBuffer, filename, userId) => {
@@ -50,7 +51,7 @@ const analyzeProject = async (projectId, fileBuffer, filename, userId) => {
       throw axiosErr;
     }
 
-    const { calibrateRisk } = require('../utils/calibration');
+   
     const rawResult = response.data;
     const mlResult  = calibrateRisk(rawResult);  // ← calibration apply
     console.log(`✅ ML worker responded for project ${projectId}`);
