@@ -53,7 +53,9 @@ const analyzeProject = async (projectId, fileBuffer, filename, userId) => {
 
    
     const rawResult = response.data;
-    const mlResult  = calibrateRisk(rawResult);  // ← calibration apply
+    console.log(`📊 METRICS — loc: ${rawResult.features?.loc}, vg: ${rawResult.features?.['v(g)']}, branches: ${rawResult.features?.branchcount}, prob: ${rawResult.bug_probability}, risk: ${rawResult.risk_level}`);
+    const mlResult  = calibrateRisk(rawResult); 
+    console.log(`🔍 AFTER CAL — prob: ${mlResult.bug_probability}, risk: ${mlResult.risk_level}, applied: ${mlResult.calibration?.applied}`);// ← calibration apply
     console.log(`✅ ML worker responded for project ${projectId}`);
       if (mlResult.calibration?.applied) {
     console.log(`🔧 Calibration applied: ${mlResult.calibration.note}`);
