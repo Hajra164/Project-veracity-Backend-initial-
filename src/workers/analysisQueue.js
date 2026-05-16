@@ -50,8 +50,13 @@ const analyzeProject = async (projectId, fileBuffer, filename, userId) => {
       throw axiosErr;
     }
 
-    const mlResult = response.data;
+    const { calibrateRisk } = require('../utils/calibration');
+    const rawResult = response.data;
+    const mlResult  = calibrateRisk(rawResult);  // ← calibration apply
     console.log(`✅ ML worker responded for project ${projectId}`);
+      if (mlResult.calibration?.applied) {
+    console.log(`🔧 Calibration applied: ${mlResult.calibration.note}`);
+    }
 
     const riskLevel = mlResult.risk_level === 'High' ? 'HIGH' :
                       mlResult.risk_level === 'Low' ? 'LOW' : 'MEDIUM';
