@@ -128,18 +128,20 @@ router.post('/start', verifyToken, async (req, res) => {
     let context = { risk_level, top_features };
 
     if (project_id) {
-      const projectResult = await pool.query(
-        `SELECT p.project_name,
-                pr.risk_level, pr.risk_score,
-                array_agg(se.feature_name ORDER BY se.feature_rank) AS features
-         FROM   projects p
-         LEFT   JOIN predictions pr ON pr.prediction_id = p.latest_prediction_id
-         LEFT   JOIN shap_explanations se ON se.prediction_id = pr.prediction_id
-                  AND se.is_top_5 = true
+      // chat/start mein ye query update karo
+          const projectResult = await pool.query(
+          `SELECT p.project_name,
+          pr.risk_level, pr.risk_score,
+          array_agg(se.feature_name ORDER BY se.shap_value DESC) AS features
+          FROM   projects p
+          LEFT   JOIN predictions pr ON pr.prediction_id = p.latest_prediction_id
+          LEFT   JOIN shap_explanations se ON se.prediction_id = pr.prediction_id
+                AND se.is_top_5 = true
+                AND se.shap_value > 0    -- ← sirf positive SHAP
          WHERE  p.project_id = $1
          GROUP  BY p.project_name, pr.risk_level, pr.risk_score`,
-        [project_id]
-      );
+         [project_id]
+         );
 
       if (projectResult.rows.length) {
         const row = projectResult.rows[0];
@@ -339,29 +341,39 @@ router.post('/', verifyToken, async (req, res) => {
     return res.status(400).json({ error: 'projectId is required.' });
 
   try {
-    // Fetch project context
+    // ── Fetch only positive SHAP features (actual risk factors) ──
     const shapResult = await pool.query(
-      `SELECT se.feature_name, se.shap_value
+      `SELECT se.feature_name, se.shap_value, se.feature_value
        FROM   shap_explanations se
        JOIN   predictions p ON se.prediction_id = p.prediction_id
        WHERE  p.project_id = $1
-       ORDER  BY se.feature_rank ASC LIMIT 5`,
+         AND  se.shap_value > 0
+       ORDER  BY se.shap_value DESC LIMIT 5`,
       [projectId]
     );
 
-    const features = shapResult.rows.map(r => r.feature_name);
+    const features      = shapResult.rows.map(r => r.feature_name);
+    const featureValues = Object.fromEntries(
+      shapResult.rows.map(r => [r.feature_name, parseFloat(r.feature_value)])
+    );
 
+    // ── Fetch mitigations with threshold ─────
     const mitResult = await pool.query(
-      `SELECT risk_driver, mitigation_advice
+      `SELECT risk_driver, mitigation_advice, threshold_high
        FROM   mitigation_rules
        WHERE  risk_driver = ANY($1) AND is_active = true`,
       [features]
     );
 
-    // Build context string for Groq
-    const contextStr = mitResult.rows.length
-      ? mitResult.rows.map(r => `${r.risk_driver}: ${r.mitigation_advice}`).join('\n')
-      : 'No specific mitigations found.';
+    // ── Only show advice if feature exceeds threshold ──
+    const validMitigations = mitResult.rows.filter(r => {
+      const featureVal = featureValues[r.risk_driver] || 0;
+      return featureVal > r.threshold_high;
+    });
+
+    const contextStr = validMitigations.length
+      ? validMitigations.map(r => `${r.risk_driver}: ${r.mitigation_advice}`).join('\n')
+      : 'Your code metrics are within safe limits. Good job!';
 
     const messages = [
       {
@@ -376,7 +388,7 @@ router.post('/', verifyToken, async (req, res) => {
 
     const reply = await callGroq(messages);
 
-    return res.json({ reply, features });
+    return res.json({ reply, features, mitigations: validMitigations });
 
   } catch (err) {
     console.error('Legacy chat error:', err.message);
