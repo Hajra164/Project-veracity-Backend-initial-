@@ -147,18 +147,43 @@ router.post('/start', verifyToken, async (req, res) => {
         const row = projectResult.rows[0];
 
         // Get mitigations
-        const mitResult = await pool.query(
-          `SELECT mitigation_advice FROM mitigation_rules
-           WHERE  is_active = true
-           ORDER  BY priority DESC LIMIT 3`
+        // ── Fetch feature values for threshold check ──
+        const featureValResult = await pool.query(
+        `SELECT feature_name, feature_value
+         FROM shap_explanations
+         WHERE prediction_id = (
+         SELECT latest_prediction_id FROM projects WHERE project_id = $1
+         ) AND shap_value > 0
+         ORDER BY shap_value DESC LIMIT 5`,
+         [project_id]
+          );
+
+        const featureValues = Object.fromEntries(
+        featureValResult.rows.map(r => [r.feature_name, parseFloat(r.feature_value)])
         );
 
-        context = {
-          project_name : row.project_name,
-          risk_level   : row.risk_level,
-          risk_score   : row.risk_score,
-          top_features : row.features?.filter(Boolean) || [],
-          mitigations  : mitResult.rows.map(r => r.mitigation_advice),
+        const featureNames = featureValResult.rows.map(r => r.feature_name);
+
+        // ── Fetch matched mitigations with threshold check ──
+       const mitResult = await pool.query(
+       `SELECT risk_driver, mitigation_advice, threshold_high
+       FROM mitigation_rules
+       WHERE risk_driver = ANY($1) AND is_active = true`,
+       [featureNames]
+       );
+
+       const validMitigations = mitResult.rows
+       .filter(r => (featureValues[r.risk_driver] || 0) > r.threshold_high)
+       .map(r => r.mitigation_advice);
+
+       context = {
+       project_name : row.project_name,
+       risk_level   : row.risk_level,
+       risk_score   : row.risk_score,
+       top_features : featureNames,
+       mitigations  : validMitigations.length
+       ? validMitigations
+       : ['Your code metrics are within safe limits. Good job!'],
         };
       }
     }
