@@ -184,6 +184,16 @@ router.post('/start', verifyToken, async (req, res) => {
        mitigations  : validMitigations.length
        ? validMitigations
        : ['Your code metrics are within safe limits. Good job!'],
+
+            // ← ADD THIS for dropdown
+      risk_factors : mitResult.rows
+      .filter(r => (featureValues[r.risk_driver] || 0) > r.threshold_high)
+      .map(r => ({
+      feature  : r.risk_driver,
+      value    : featureValues[r.risk_driver],
+      threshold: r.threshold_high,
+      advice   : r.mitigation_advice
+      }))
         };
       }
     }
