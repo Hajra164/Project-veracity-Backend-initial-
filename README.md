@@ -2,12 +2,21 @@
 
 > **AI-Powered Code Risk Analysis Platform**  
 
+<img width="1903" height="936" alt="image" src="https://github.com/user-attachments/assets/179e64f4-a7bf-4ecf-a3f3-4d72265bc8a0" />
+<img width="1772" height="929" alt="image" src="https://github.com/user-attachments/assets/14ad9aed-a793-402a-8899-7565539d0708" />
+<img width="1913" height="1017" alt="image" src="https://github.com/user-attachments/assets/c9289720-ab30-49e8-b078-8efef3673d04" />
+<img width="1919" height="1025" alt="image" src="https://github.com/user-attachments/assets/23d89044-4c4a-4646-9e39-b402281d3195" />
 
 ---
+<img width="1904" height="949" alt="image" src="https://github.com/user-attachments/assets/038507f8-f0cb-44e7-bb78-7377e97f5235" />
+
+
 
 ## 📁 Project Structure
 
 ```
+
+
 backend-ml/
 ├── backend/                  # Node.js REST API
 │   ├── src/
