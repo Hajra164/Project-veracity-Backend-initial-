@@ -29,6 +29,7 @@ app.use(cors({
       'http://localhost:3000',
       'http://localhost:5000',
       'https://project-veracity-backend-initial-production-be6f.up.railway.app',
+      'https://project-veracity-backend-initial-production-71b7.up.railway.app',
     ];
  
     // Allow any Vercel URL — covers all preview + production URLs
