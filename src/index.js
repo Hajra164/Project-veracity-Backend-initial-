@@ -29,6 +29,8 @@ app.use(cors({
       'http://localhost:3000',
       'http://localhost:5000',
       'https://veracity-delta.vercel.app',
+      'https://veracity-eimebione-duas-projects-56debfcf.vercel.app',
+      'https://veracity-git-dev-duas-projects-56debfcf.vercel.app',
       'https://project-veracity-backend-initial-production-be6f.up.railway.app',
       'https://project-veracity-backend-initial-production-71b7.up.railway.app',
      
